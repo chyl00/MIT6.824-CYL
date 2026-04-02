@@ -29,18 +29,49 @@ func ihash(key string) int {
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 
+	workerID := GenerateID()
+
+	// 后台心跳协程
+	stopHeartbeat := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-stopHeartbeat:
+				return
+			case <-time.After(3 * time.Second):
+				hArgs := &HeartbeatArgs{WorkerID: workerID}
+				hReply := &HeartbeatReply{}
+				ok := call("Coordinator.Heartbeat", hArgs, hReply)
+				if !ok || hReply.Stop {
+					// coordinator 已完成或不可达，通知主循环退出
+					close(stopHeartbeat)
+					return
+				}
+			}
+		}
+	}()
+
 	args, reply := &Args{}, &Reply{}
 
 	for {
+		// 检查心跳协程是否已通知退出
+		select {
+		case <-stopHeartbeat:
+			fmt.Println("收到退出信号，worker 退出")
+			return
+		default:
+		}
+
 		fmt.Printf("reply : %+v\n", reply)
 		switch reply.T {
 		case "map":
 			args.Addr = reply.Addr
 			if err := maptask(mapf, reply); err != nil {
 				log.Printf("maptask 处理失败 %v: %v", reply.Addr, err)
-				args.Addr = "" // 不汇报完成，让 coordinator 超时重新分配
+				args.Addr = "" // 不汇报完成，让超时机制重新分配
 			}
 			if !Call(args, reply) {
+				close(stopHeartbeat)
 				return
 			}
 
@@ -51,6 +82,7 @@ func Worker(mapf func(string, string) []KeyValue,
 				args.Addr = ""
 			}
 			if !Call(args, reply) {
+				close(stopHeartbeat)
 				return
 			}
 
@@ -58,26 +90,28 @@ func Worker(mapf func(string, string) []KeyValue,
 			time.Sleep(3 * time.Second)
 			args.Addr = ""
 			if !Call(args, reply) {
+				close(stopHeartbeat)
 				return
 			}
 
 		case "exit":
 			fmt.Println("所有任务完成，worker 正常退出")
+			close(stopHeartbeat)
 			return
 
 		default:
-			// 第一次请求
 			args.Addr = ""
 			if !Call(args, reply) {
+				close(stopHeartbeat)
 				return
 			}
 		}
 	}
 }
 
-// map 任务执行
+// -------- map 任务 --------
+
 func maptask(mapf func(string, string) []KeyValue, reply *Reply) error {
-	// 读取输入文件
 	file, err := os.Open(reply.Addr)
 	if err != nil {
 		return fmt.Errorf("cannot open %v: %w", reply.Addr, err)
@@ -90,9 +124,7 @@ func maptask(mapf func(string, string) []KeyValue, reply *Reply) error {
 
 	kva := mapf(reply.Addr, string(content))
 
-	// 先写到临时文件，全部成功后再原子 rename
-	// 文件命名：map-result-{mapIndex}-{reduceIndex}
-	// 不同 map 任务有不同 mapIndex，rename 不会互相覆盖
+	// 先写临时文件
 	tmpFiles := make([]*os.File, reply.N)
 	tmpNames := make([]string, reply.N)
 	for i := 0; i < reply.N; i++ {
@@ -118,7 +150,7 @@ func maptask(mapf func(string, string) []KeyValue, reply *Reply) error {
 		}
 	}
 
-	// 全部写完后原子 rename，目标文件名带 mapIndex 保证唯一
+	// 全部写完后原子 rename，文件名带 mapIndex 保证不同 map 任务互不覆盖
 	for i := 0; i < reply.N; i++ {
 		tmpFiles[i].Close()
 		tmpFiles[i] = nil
@@ -130,13 +162,14 @@ func maptask(mapf func(string, string) []KeyValue, reply *Reply) error {
 	return nil
 }
 
-// reduce 任务执行
+// -------- reduce 任务 --------
+
 func reducetask(reducef func(string, []string) string, reply *Reply) error {
-	// 读取所有属于该 reduce 任务的中间文件：map-result-*-{reduceIndex}
+	// 读取所有属于该 reduce 任务的中间文件
 	pattern := fmt.Sprintf("map-result-*-%d", reply.Index)
 	files, err := filepath.Glob(pattern)
 	if err != nil || len(files) == 0 {
-		return fmt.Errorf("no intermediate files found for reduce-%d", reply.Index)
+		return fmt.Errorf("no intermediate files for reduce-%d", reply.Index)
 	}
 
 	var kva []KeyValue
@@ -157,11 +190,10 @@ func reducetask(reducef func(string, []string) string, reply *Reply) error {
 		}
 		f.Close()
 		if err := scanner.Err(); err != nil {
-			return fmt.Errorf("scanner error on %v: %w", fname, err)
+			return fmt.Errorf("scanner error %v: %w", fname, err)
 		}
 	}
 
-	// 按 Key 排序
 	sort.Slice(kva, func(i, j int) bool {
 		return kva[i].Key < kva[j].Key
 	})
@@ -201,17 +233,17 @@ func reducetask(reducef func(string, []string) string, reply *Reply) error {
 	if err := os.Rename(tmpName, oname); err != nil {
 		return err
 	}
-
 	return nil
 }
 
-// Call 发起 RPC，coordinator 不可达时返回 false
+// -------- RPC --------
+
 func Call(args *Args, reply *Reply) bool {
 	ok := call("Coordinator.CoordinatorHandler", args, reply)
 	if ok {
 		fmt.Printf("RPC 响应成功: %+v\n", reply)
 	} else {
-		fmt.Println("coordinator 已退出，worker 退出")
+		fmt.Println("coordinator 不可达，worker 退出")
 	}
 	return ok
 }
@@ -224,7 +256,6 @@ func call(rpcname string, args interface{}, reply interface{}) bool {
 		return false
 	}
 	defer c.Close()
-
 	err = c.Call(rpcname, args, reply)
 	if err == nil {
 		return true
