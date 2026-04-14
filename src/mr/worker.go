@@ -56,6 +56,7 @@ func Worker(mapf func(string, string) []KeyValue,
 	for {
 		// 检查心跳协程是否已通知退出
 		select {
+		// 当chan关闭后读取会读取到零值
 		case <-stopHeartbeat:
 			fmt.Println("收到退出信号，worker 退出")
 			return

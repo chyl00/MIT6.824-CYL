@@ -10,12 +10,18 @@ import (
 // -------- 雪花算法生成 WorkerID --------
 
 const (
+	// 序列号 12 位
 	sequenceBits uint8 = 12
-	workerBits   uint8 = 10
-	maxSequence  int64 = -1 ^ (-1 << sequenceBits)
-	timeShift    uint8 = workerBits + sequenceBits
-	workerShift        = sequenceBits
-	epoch        int64 = 1700000000000 // 自定义起始时间戳 ms
+	// workerID 10 位
+	workerBits uint8 = 10
+	// 1ms中最多生成的序列号数量
+	maxSequence int64 = -1 ^ (-1 << sequenceBits)
+	// 时间戳偏移量
+	timeShift uint8 = workerBits + sequenceBits
+	// workerID偏移量
+	workerShift = sequenceBits
+	// 起始时间戳
+	epoch int64 = 1700000000000 // 自定义起始时间戳 ms
 )
 
 type snowflake struct {
@@ -25,8 +31,10 @@ type snowflake struct {
 	sequence  int64
 }
 
+// 单例模式
 var sf = &snowflake{workerID: int64(os.Getpid()) & 0x3FF}
 
+// 雪花UUID生成逻辑
 func GenerateID() int64 {
 	sf.mu.Lock()
 	defer sf.mu.Unlock()
@@ -43,6 +51,7 @@ func GenerateID() int64 {
 		sf.sequence = 0
 	}
 	sf.lastStamp = now
+	// 拼接 UUID
 	return (now-epoch)<<timeShift | sf.workerID<<workerShift | sf.sequence
 }
 
