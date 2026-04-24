@@ -3,15 +3,19 @@ package kvraft
 import "6.824/labrpc"
 import "crypto/rand"
 import "math/big"
+import "sync/atomic"
 
 var globalIndex int64
 
 type Clerk struct {
-	mu sync.Mutex
 	servers []*labrpc.ClientEnd
 	leaderId int
 	clientId int64
 	seqNum int64
+}
+
+func (ck *Clerk) nextSeq() int64 {
+	return atomic.AddInt64(&ck.seqNum , 1)
 }
 
 func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
