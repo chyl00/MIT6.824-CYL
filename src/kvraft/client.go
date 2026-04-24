@@ -25,36 +25,64 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	return ck
 }
 
-//
-// fetch the current value for a key.
-// returns "" if the key does not exist.
-// keeps trying forever in the face of all other errors.
-//
-// you can send an RPC with code like this:
-// ok := ck.servers[i].Call("KVServer.Get", &args, &reply)
-//
-// the types of args and reply (including whether they are pointers)
-// must match the declared types of the RPC handler function's
-// arguments. and reply must be passed as a pointer.
-//
 func (ck *Clerk) Get(key string) string {
-
-	// You will have to modify this function.
-	return ""
+	seq := ck.nextSeq()
+	args := &GetArgs{
+		Key:      key,
+		ClientId: ck.clientId,
+		SeqId:    seq,
+	}
+ 
+	for {
+		reply := &GetReply{}
+		ok := ck.servers[ck.leaderId].Call("KVServer.Get", args, reply)
+ 
+		if ok {
+			switch reply.Err {
+			case OK:
+				return reply.Value
+			case ErrNoKey:
+				return ""
+			case ErrWrongLeader, ErrTimeout:
+				// 换一台服务器重试
+			}
+		}
+		// RPC 失败或 ErrWrongLeader：轮转到下一台
+		ck.leaderId = (ck.leaderId + 1) % len(ck.servers)
+	}
 }
-
+ 
+// ==================== PutAppend ====================
 //
-// shared by Put and Append.
-//
-// you can send an RPC with code like this:
-// ok := ck.servers[i].Call("KVServer.PutAppend", &args, &reply)
-//
-// the types of args and reply (including whether they are pointers)
-// must match the declared types of the RPC handler function's
-// arguments. and reply must be passed as a pointer.
+// 幂等性分析：
+//   Put/Append 是写操作，网络丢包或 leader 切换可能导致 client 重发。
+//   server 端维护 lastSeq[clientId]，若 SeqId <= lastSeq 则直接返回
+//   缓存结果，不重复执行状态机，从而保证 exactly-once 语义。
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
-	// You will have to modify this function.
+	seq := ck.nextSeq()
+	args := &PutAppendArgs{
+		Key:      key,
+		Value:    value,
+		Op:       op,
+		ClientId: ck.clientId,
+		SeqId:    seq,
+	}
+ 
+	for {
+		reply := &PutAppendReply{}
+		ok := ck.servers[ck.leaderId].Call("KVServer.PutAppend", args, reply)
+ 
+		if ok {
+			switch reply.Err {
+			case OK:
+				return
+			case ErrWrongLeader, ErrTimeout:
+				// 换一台服务器重试
+			}
+		}
+		ck.leaderId = (ck.leaderId + 1) % len(ck.servers)
+	}
 }
 
 func (ck *Clerk) Put(key string, value string) {

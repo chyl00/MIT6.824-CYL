@@ -3,6 +3,7 @@ package kvraft
 const (
 	OK             = "OK"
 	ErrNoKey       = "ErrNoKey"
+	ErrTimeout     = "ErrTimeout"
 	ErrWrongLeader = "ErrWrongLeader"
 )
 
