@@ -476,6 +476,7 @@ func TestUnreliableOneKey3A(t *testing.T) {
 // Submit a request in the minority partition and check that the requests
 // doesn't go through until the partition heals.  The leader in the original
 // network ends up in the minority partition.
+// TODO
 func TestOnePartition3A(t *testing.T) {
 	const nservers = 5
 	cfg := make_config(t, nservers, false, -1)
@@ -556,11 +557,11 @@ func TestManyPartitionsOneClient3A(t *testing.T) {
 	GenericTest(t, "3A", 1, 5, false, false, true, -1, false)
 }
 
+// TODO
 func TestManyPartitionsManyClients3A(t *testing.T) {
 	// Test: partitions, many clients (3A) ...
 	GenericTest(t, "3A", 5, 5, false, false, true, -1, false)
 }
-
 func TestPersistOneClient3A(t *testing.T) {
 	// Test: restarts, one client (3A) ...
 	GenericTest(t, "3A", 1, 5, false, true, false, -1, false)
@@ -581,22 +582,22 @@ func TestPersistPartition3A(t *testing.T) {
 	GenericTest(t, "3A", 5, 5, false, true, true, -1, false)
 }
 
+// TODO
 func TestPersistPartitionUnreliable3A(t *testing.T) {
 	// Test: unreliable net, restarts, partitions, many clients (3A) ...
 	GenericTest(t, "3A", 5, 5, true, true, true, -1, false)
 }
 
+// TODO
 func TestPersistPartitionUnreliableLinearizable3A(t *testing.T) {
 	// Test: unreliable net, restarts, partitions, random keys, many clients (3A) ...
 	GenericTest(t, "3A", 15, 7, true, true, true, -1, true)
 }
 
-//
 // if one server falls behind, then rejoins, does it
 // recover by using the InstallSnapshot RPC?
 // also checks that majority discards committed log entries
 // even if minority doesn't respond.
-//
 func TestSnapshotRPC3B(t *testing.T) {
 	const nservers = 3
 	maxraftstate := 1000
@@ -711,6 +712,7 @@ func TestSnapshotUnreliableRecover3B(t *testing.T) {
 	GenericTest(t, "3B", 5, 5, true, true, false, 1000, false)
 }
 
+// TODO
 func TestSnapshotUnreliableRecoverConcurrentPartition3B(t *testing.T) {
 	// Test: unreliable net, restarts, partitions, snapshots, many clients (3B) ...
 	GenericTest(t, "3B", 5, 5, true, true, true, 1000, false)

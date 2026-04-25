@@ -42,7 +42,7 @@ type LogEntry struct {
 type Raft struct {
 	mu        sync.Mutex
 	peers     []*labrpc.ClientEnd
-	persister *Persister
+	Persister *Persister
 	me        int
 	dead      int32
 	state     int
@@ -126,7 +126,7 @@ func (rf *Raft) persist() {
 	e.Encode(rf.lastIncludedIndex)
 	e.Encode(rf.lastIncludedTerm)
 	data := w.Bytes()
-	rf.persister.SaveRaftState(data)
+	rf.Persister.SaveRaftState(data)
 }
 
 func (rf *Raft) readPersist(data []byte) {
@@ -187,7 +187,7 @@ func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int,
 	e.Encode(rf.log)
 	e.Encode(rf.lastIncludedIndex)
 	e.Encode(rf.lastIncludedTerm)
-	rf.persister.SaveStateAndSnapshot(w.Bytes(), snapshot)
+	rf.Persister.SaveStateAndSnapshot(w.Bytes(), snapshot)
 
 	return true
 }
@@ -212,7 +212,7 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	e.Encode(rf.log)
 	e.Encode(rf.lastIncludedIndex)
 	e.Encode(rf.lastIncludedTerm)
-	rf.persister.SaveStateAndSnapshot(w.Bytes(), snapshot)
+	rf.Persister.SaveStateAndSnapshot(w.Bytes(), snapshot)
 }
 
 // ==================== 2A 选举相关 ====================
@@ -523,7 +523,7 @@ func (rf *Raft) replicateTo(peer int) {
 			LeaderId:          rf.me,
 			LastIncludedIndex: rf.lastIncludedIndex,
 			LastIncludedTerm:  rf.lastIncludedTerm,
-			Data:              rf.persister.ReadSnapshot(),
+			Data:              rf.Persister.ReadSnapshot(),
 		}
 		rf.mu.Unlock()
 
@@ -760,7 +760,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	rf := &Raft{}
 	rf.peers = peers
-	rf.persister = persister
+	rf.Persister = persister
 	rf.me = me
 	rf.applyCh = applyCh
 
