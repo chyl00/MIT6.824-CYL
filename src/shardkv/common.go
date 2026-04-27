@@ -1,32 +1,24 @@
 package shardkv
 
-//
-// Sharded key/value server.
-// Lots of replica groups, each running Raft.
-// Shardctrler decides which group serves each shard.
-// Shardctrler may change shard assignment from time to time.
-//
-// You will have to modify these definitions.
-//
-
 const (
 	OK             = "OK"
 	ErrNoKey       = "ErrNoKey"
 	ErrWrongGroup  = "ErrWrongGroup"
 	ErrWrongLeader = "ErrWrongLeader"
+	ErrTimeout     = "ErrTimeout"
+	ErrNotReady    = "ErrNotReady"
 )
 
 type Err string
 
-// Put or Append
+// ==================== 客户端 KV ops ====================
+
 type PutAppendArgs struct {
-	// You'll have to add definitions here.
-	Key   string
-	Value string
-	Op    string // "Put" or "Append"
-	// You'll have to add definitions here.
-	// Field names must start with capital letters,
-	// otherwise RPC will break.
+	Key      string
+	Value    string
+	Op       string // "Put" or "Append"
+	ClientId int64
+	SeqId    int64
 }
 
 type PutAppendReply struct {
@@ -34,11 +26,45 @@ type PutAppendReply struct {
 }
 
 type GetArgs struct {
-	Key string
-	// You'll have to add definitions here.
+	Key      string
+	ClientId int64
+	SeqId    int64
 }
 
 type GetReply struct {
 	Err   Err
 	Value string
+}
+
+// ==================== 去重表条目（跨 group 传输） ====================
+
+// DupEntry 放 common.go，因为 PullShardReply 需要它
+type DupEntry struct {
+	SeqId int64
+	Err   Err
+	Value string
+}
+
+// ==================== Shard 迁移 RPC ====================
+
+// PullShard：新 owner 向旧 owner 拉取 shard 数据
+type PullShardArgs struct {
+	ConfigNum int
+	ShardIds  []int
+}
+
+type PullShardReply struct {
+	Err      Err
+	Shards   map[int]map[string]string // shardId -> kv
+	DupTable map[int64]DupEntry        // 随 shard 一起迁移，保证幂等性
+}
+
+// GCShard：新 owner 通知旧 owner 删除已迁移的 shard 数据
+type GCArgs struct {
+	ConfigNum int
+	ShardIds  []int
+}
+
+type GCReply struct {
+	Err Err
 }

@@ -671,48 +671,48 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 // ==================== Apply 协程 ====================
 
 func (rf *Raft) applier() {
-	for !rf.killed() {
-		rf.mu.Lock()
-		for rf.lastApplied >= rf.commitIndex {
-			rf.applyCond.Wait()
-		}
+    for !rf.killed() {
+        rf.mu.Lock()
+        for rf.lastApplied >= rf.commitIndex {
+            rf.applyCond.Wait()
+        }
 
-		commitIndex := rf.commitIndex
-		lastApplied := rf.lastApplied
+        commitIndex := rf.commitIndex
+        lastApplied := rf.lastApplied
+        lastIncludedIndex := rf.lastIncludedIndex   // ← 保存一份快照
 
-		// 收集需要提交的日志
-		entries := make([]LogEntry, 0)
-		startIdx := lastApplied + 1
-		for i := startIdx; i <= commitIndex; i++ {
-			if i <= rf.lastIncludedIndex {
-				continue
-			}
-			si := rf.toSliceIndex(i)
-			if si < 0 || si >= len(rf.log) {
-				break
-			}
-			entries = append(entries, rf.log[si])
-		}
-		rf.mu.Unlock()
+        entries := make([]LogEntry, 0)
+        startIdx := lastApplied + 1
+        for i := startIdx; i <= commitIndex; i++ {
+            if i <= lastIncludedIndex {              // ← 在锁内使用拷贝，也可以继续用 local var
+                continue
+            }
+            si := rf.toSliceIndex(i)
+            if si < 0 || si >= len(rf.log) {
+                break
+            }
+            entries = append(entries, rf.log[si])
+        }
+        rf.mu.Unlock()
 
-		for i, entry := range entries {
-			globalIdx := startIdx + i
-			if globalIdx <= rf.lastIncludedIndex {
-				continue
-			}
-			rf.applyCh <- ApplyMsg{
-				CommandValid: true,
-				Command:      entry.Command,
-				CommandIndex: globalIdx,
-			}
-		}
+        for i, entry := range entries {
+            globalIdx := startIdx + i
+            if globalIdx <= lastIncludedIndex {      // ← 使用局部变量，无锁安全
+                continue
+            }
+            rf.applyCh <- ApplyMsg{
+                CommandValid: true,
+                Command:      entry.Command,
+                CommandIndex: globalIdx,
+            }
+        }
 
-		rf.mu.Lock()
-		if commitIndex > rf.lastApplied {
-			rf.lastApplied = commitIndex
-		}
-		rf.mu.Unlock()
-	}
+        rf.mu.Lock()
+        if commitIndex > rf.lastApplied {
+            rf.lastApplied = commitIndex
+        }
+        rf.mu.Unlock()
+    }
 }
 
 // ==================== ticker & heartbeat ====================
