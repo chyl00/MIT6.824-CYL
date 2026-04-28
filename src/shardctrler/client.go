@@ -8,7 +8,9 @@ import (
 	"sync/atomic"
 	"time"
 )
-
+// shardctrler 主要负责管理配置文件
+// shardkv 主要是负责管理分片数据
+// raft 主要是负责日志数据的同步
 type Clerk struct {
 	servers  []*labrpc.ClientEnd
 	clientId int64
@@ -47,10 +49,8 @@ func randBits(bits uint) int64 {
 	return n.Int64()
 }
 
-func nrand() int64 {
-	max := big.NewInt(int64(1) << 62)
-	bigx, _ := rand.Int(rand.Reader, max)
-	return bigx.Int64()
+func (ck *Clerk) nextSeq() int64 {
+	return atomic.AddInt64(&ck.seqId, 1)
 }
 
 func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
@@ -60,10 +60,6 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 		seqId:    0,
 		leaderId: 0,
 	}
-}
-
-func (ck *Clerk) nextSeq() int64 {
-	return atomic.AddInt64(&ck.seqId, 1)
 }
 
 // ==================== Query ====================
@@ -92,7 +88,7 @@ func (ck *Clerk) Query(num int) Config {
 }
 
 // ==================== Join ====================
-
+// 传入新group和对应的服务IP 只包含新group 旧group不在其中
 func (ck *Clerk) Join(servers map[int][]string) {
 	seq := ck.nextSeq()
 	args := &JoinArgs{

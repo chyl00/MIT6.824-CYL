@@ -1,6 +1,6 @@
 package shardctrler
 
-const NShards = 10
+const NShards = 10 // 固定的分片数量
 
 type Config struct {
 	Num    int              // config number

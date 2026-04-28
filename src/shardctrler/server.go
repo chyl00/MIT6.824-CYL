@@ -215,6 +215,7 @@ func (sc *ShardCtrler) applier() {
 		}
 
 		var notifyCh chan applyResult
+		// 只有(ClientId,seqId)相同才连接通道 发送结果
 		if e, exists := sc.notifyChans[msg.CommandIndex]; exists &&
 			e.clientId == op.ClientId && e.seqId == op.SeqId {
 			notifyCh = e.ch
@@ -392,7 +393,7 @@ func sortedGIDs(groups map[int][]string) []int {
 }
 
 // ==================== Kill ====================
-
+// shard 和 raft 都要 kill
 func (sc *ShardCtrler) Kill() {
 	atomic.StoreInt32(&sc.dead, 1)
 	sc.rf.Kill()
